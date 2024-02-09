@@ -15,6 +15,10 @@ CREATE TABLE transacoes (
 		FOREIGN KEY (cliente_id) REFERENCES clientes(id)
 );
 
+CREATE INDEX ON public.transacoes (cliente_id);
+CREATE INDEX ON public.transacoes (cliente_id, realizada_em DESC);
+
+
 CREATE TABLE saldos (
 	id SERIAL PRIMARY KEY,
 	cliente_id INTEGER NOT NULL,
