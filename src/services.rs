@@ -53,6 +53,7 @@ impl Services {
         costumer_id: i32,
         input: models::IncomeTransaction,
     ) -> Result<models::OutputTransaction, ApiError> {
+        let (amount, r#type, description) = self.validate_input(&input)?;
         if costumer_id > 5 {
             return Err(ApiError::NotFound);
         }
@@ -70,43 +71,21 @@ impl Services {
 
         let transaction = models::Transaction {
             id: 1,
-            amount: input.amount,
-            r#type: input.r#type,
+            amount,
+            r#type,
             costumer_id,
             created_at: chrono::Utc::now().naive_utc(),
-            description: input.description,
+            description,
         };
+
         if transaction.r#type == "d" {
             let _ = self.debit_transaction(&mut customer, &transaction);
         }
         if transaction.r#type == "c" {
             self.credit_transaction(&mut customer, &transaction);
         }
-        let mut tx = self.connection.begin().await.unwrap();
-        sqlx::query(
-            r#"
-                INSERT INTO public.transacoes (cliente_id, valor, tipo, descricao)
-                VALUES ($1, $2, $3, $4)
-            "#,
-        )
-        .bind(transaction.costumer_id)
-        .bind(transaction.amount)
-        .bind(transaction.r#type)
-        .bind(transaction.description)
-        .execute(&mut *tx)
-        .await?;
-        sqlx::query(
-            r#"
-                UPDATE public.saldos
-                SET valor = $1
-                WHERE cliente_id = $2
-            "#,
-        )
-        .bind(customer.balance)
-        .bind(transaction.costumer_id)
-        .execute(&mut *tx)
-        .await?;
-        tx.commit().await?;
+        let _ = self.do_transaction(&customer, &transaction).await;
+
         Ok(models::OutputTransaction {
             limit: customer.limit,
             balance: customer.balance,
@@ -130,5 +109,59 @@ impl Services {
         transaction: &models::Transaction,
     ) {
         customer.balance += transaction.amount;
+    }
+    async fn do_transaction(
+        &self,
+        customer: &models::Customer,
+        transaction: &models::Transaction,
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.connection.begin().await?;
+        sqlx::query(
+            r#"
+                INSERT INTO public.transacoes (cliente_id, valor, tipo, descricao)
+                VALUES ($1, $2, $3, $4)
+            "#,
+        )
+        .bind(transaction.costumer_id)
+        .bind(transaction.amount)
+        .bind(transaction.r#type.as_str())
+        .bind(transaction.description.as_str())
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            r#"
+                UPDATE public.saldos
+                SET valor = $1
+                WHERE cliente_id = $2
+            "#,
+        )
+        .bind(customer.balance)
+        .bind(transaction.costumer_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(())
+    }
+    fn validate_input(
+        &self,
+        input: &models::IncomeTransaction,
+    ) -> Result<(i32, String, String), ApiError> {
+        if input.amount.is_none() || input.r#type.is_none() || input.description.is_none() {
+            return Err(ApiError::UnprocessableEntity);
+        }
+        let amount = input.amount.unwrap();
+        let r#type = input.r#type.clone().unwrap();
+        let description = input.description.clone().unwrap();
+        if description.trim().len() > 10 || description.is_empty() {
+            return Err(ApiError::UnprocessableEntity);
+        }
+        if r#type != "c" && r#type != "d" {
+            return Err(ApiError::UnprocessableEntity);
+        }
+        if amount < 0 {
+            return Err(ApiError::UnprocessableEntity);
+        }
+
+        Ok((amount, r#type, description))
     }
 }
