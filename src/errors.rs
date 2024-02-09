@@ -35,6 +35,7 @@ impl From<sqlx::Error> for ApiError {
     fn from(value: sqlx::Error) -> Self {
         match value {
             sqlx::Error::RowNotFound => ApiError::NotFound,
+            sqlx::Error::PoolTimedOut => ApiError::InternalServerError,
             _ => ApiError::InternalServerError,
         }
     }
