@@ -1,10 +1,11 @@
 use actix_web::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceRequest};
+use actix_web::web::JsonConfig;
 use actix_web::{web, HttpServer};
+use sqlx::postgres::PgPoolOptions;
 use sqlx::PgPool;
 use std::net::TcpListener;
 use std::str::FromStr;
-use sqlx::postgres::PgPoolOptions;
 
 mod errors;
 mod handlers;
@@ -13,9 +14,10 @@ mod services;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let db_pool = PgPoolOptions::new().max_connections(30).connect(
-        "postgres://admin:123@db:5432/rinha",
-    ).await.expect("Failed to connect to Postgres.");
+    let db_pool = PgPoolOptions::new()
+        .connect("postgres://admin:123@db:5432/rinha")
+        .await
+        .expect("Failed to connect to Postgres.");
     let port = u16::from_str("8080");
     let address = format!("0.0.0.0:{}", port.unwrap());
     let listener = TcpListener::bind(address).expect("Failed to bind random port");
@@ -39,6 +41,13 @@ pub fn mk_app(
     >,
 > {
     let mut server_app = actix_web::App::new();
+    server_app = server_app.app_data(JsonConfig::default().error_handler(|err, _| {
+        actix_web::error::InternalError::from_response(
+            err,
+            actix_web::HttpResponse::UnprocessableEntity().finish(),
+        )
+        .into()
+    }));
     let mut route = web::scope("clientes").app_data(web::Data::new(db_pool));
     route = route.service(
         web::resource("/{costumer_id}/extrato").route(web::get().to(handlers::get_statements)),
