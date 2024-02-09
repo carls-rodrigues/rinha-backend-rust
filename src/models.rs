@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::Row;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Customer {
     pub limit: i32,
     pub balance: i32,
@@ -19,7 +19,7 @@ impl TryFrom<PgRow> for Customer {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Transaction {
     #[serde(skip_serializing)]
     pub id: i32,
@@ -73,11 +73,11 @@ impl TryFrom<PgRow> for AccountBalance {
 #[derive(Serialize, Deserialize)]
 pub struct IncomeTransaction {
     #[serde(rename = "valor")]
-    pub amount: i32,
+    pub amount: Option<i32>,
     #[serde(rename = "tipo")]
-    pub r#type: String,
+    pub r#type: Option<String>,
     #[serde(rename = "descricao")]
-    pub description: String,
+    pub description: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
