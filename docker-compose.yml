@@ -13,7 +13,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.45"
+          cpus: "0.4"
           memory: "150MB"
 
   api02:
@@ -35,7 +35,7 @@ services:
       resources:
         limits:
           cpus: "0.15"
-          memory: "10MB"
+          memory: "50MB"
 
   db:
     image: postgres:latest
@@ -47,11 +47,21 @@ services:
       - "5432:5432"
     volumes:
       - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
-
+    command: postgres -c 'max_connections=50' -c 'fsync=off' -c 'synchronous_commit=off' -c 'checkpoint_timeout=1d' -c 'full_page_writes=false'
     deploy:
       resources:
         limits:
-          cpus: "0.45"
-          memory: 240MB
+          cpus: "0.55"
+          memory: 200MB
       restart_policy:
         condition: on-failure
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_LISTEN_PORT: 5050
+    network_mode: host
+    depends_on:
+      - db
