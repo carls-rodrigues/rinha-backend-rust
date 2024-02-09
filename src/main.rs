@@ -14,6 +14,7 @@ mod services;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    // TODO: move database url to env variable and check current environment
     let db_pool = PgPoolOptions::new()
         .connect("postgres://admin:123@db:5432/rinha")
         .await
