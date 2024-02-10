@@ -2,7 +2,7 @@ version: "3.5"
 
 services:
   api01: &api
-    image: cerfdotdev/rinha-rust:latest
+    image: cerfdotdev/rinha-rust:1.0.0
     hostname: api01
     depends_on:
       - db
@@ -11,7 +11,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.35"
+          cpus: "0.4"
           memory: "150MB"
 
   api02:
@@ -32,7 +32,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "0.3"
+          cpus: "0.25"
           memory: "50MB"
 
   db:
