@@ -2,25 +2,21 @@ version: "3.5"
 
 services:
   api01: &api
-    build: .
+    image: cerfdotdev/rinha-rust:latest
     hostname: api01
-    environment:
-      - DB_HOSTNAME=db
     depends_on:
       - db
-    volumes:
-      - .:/app
+    networks:
+      - rinha-network
     deploy:
       resources:
         limits:
-          cpus: "0.4"
+          cpus: "0.35"
           memory: "150MB"
 
   api02:
     <<: *api
     hostname: api02
-    environment:
-      - DB_HOSTNAME=db
 
   nginx:
     image: nginx:latest
@@ -31,37 +27,34 @@ services:
       - api02
     ports:
       - "9999:9999"
+    networks:
+      - rinha-network
     deploy:
       resources:
         limits:
-          cpus: "0.15"
+          cpus: "0.3"
           memory: "50MB"
 
   db:
     image: postgres:latest
     environment:
       POSTGRES_DB: "rinha"
-      POSTGRES_USER: "admin"
-      POSTGRES_PASSWORD: "123"
+      POSTGRES_USER: "rinha"
+      POSTGRES_PASSWORD: "rinha"
     ports:
       - "5432:5432"
+    networks:
+      - rinha-network
     volumes:
       - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
-    command: postgres -c 'max_connections=50' -c 'fsync=off' -c 'synchronous_commit=off' -c 'checkpoint_timeout=1d' -c 'full_page_writes=false'
+    command: postgres -c max_connections=50 -c shared_buffers=128MB -c fsync=off -c synchronous_commit=off -c checkpoint_timeout=1d -c full_page_writes=false
     deploy:
       resources:
         limits:
-          cpus: "0.55"
+          cpus: "0.5"
           memory: 200MB
       restart_policy:
         condition: on-failure
 
-  pgadmin:
-    image: dpage/pgadmin4
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_LISTEN_PORT: 5050
-    network_mode: host
-    depends_on:
-      - db
+networks:
+  rinha-network:
