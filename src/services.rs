@@ -40,13 +40,6 @@ impl Services {
             let transaction: models::Transaction = row.try_into().unwrap();
             transactions.push(transaction);
         }
-        // let transactions: Vec<models::Transaction> = query
-        //     .iter()
-        //     .map(|row| {
-        //         let transaction: models::Transaction = row.try_into().unwrap();
-        //         transaction
-        //     })
-        //     .collect();
         let account_statement = models::AccountStatement {
             balance: statement,
             transactions,
