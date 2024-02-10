@@ -19,12 +19,12 @@ impl TryFrom<PgRow> for Customer {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Transaction {
     #[serde(skip_serializing)]
     pub id: i32,
     #[serde(skip_serializing)]
-    pub costumer_id: i32,
+    pub customer_id: i32,
     #[serde(rename = "valor")]
     pub amount: i32,
     #[serde(rename = "tipo")]
@@ -41,8 +41,8 @@ impl TryFrom<&PgRow> for Transaction {
     fn try_from(value: &PgRow) -> Result<Self, Self::Error> {
         Ok(Transaction {
             id: value.try_get("id")?,
-            costumer_id: value.try_get("cliente_id")?,
-            amount: value.try_get("valor")?,
+            customer_id: value.try_get("cliente_id")?,
+            amount: value.try_get("tvalor")?,
             r#type: value.try_get("tipo")?,
             description: value.try_get("descricao")?,
             created_at: value.try_get("realizada_em")?,
@@ -53,7 +53,7 @@ impl TryFrom<&PgRow> for Transaction {
 #[derive(Serialize, Deserialize)]
 pub struct AccountBalance {
     pub id: i32,
-    pub costumer_id: i32,
+    pub customer_id: i32,
     #[serde(rename = "saldo")]
     pub balance: i32,
 }
@@ -64,7 +64,7 @@ impl TryFrom<PgRow> for AccountBalance {
     fn try_from(row: PgRow) -> Result<Self, Self::Error> {
         Ok(AccountBalance {
             id: 1,
-            costumer_id: 1,
+            customer_id: 1,
             balance: row.try_get("valor")?,
         })
     }
@@ -73,11 +73,11 @@ impl TryFrom<PgRow> for AccountBalance {
 #[derive(Serialize, Deserialize)]
 pub struct IncomeTransaction {
     #[serde(rename = "valor")]
-    pub amount: Option<i32>,
+    pub amount: i32,
     #[serde(rename = "tipo")]
-    pub r#type: Option<String>,
+    pub r#type: String,
     #[serde(rename = "descricao")]
-    pub description: Option<String>,
+    pub description: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -88,7 +88,7 @@ pub struct OutputTransaction {
     pub balance: i32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StatementOutput {
     pub total: i32,
     #[serde(rename = "data_extrato")]
@@ -101,6 +101,17 @@ impl TryFrom<PgRow> for StatementOutput {
     type Error = sqlx::Error;
 
     fn try_from(row: PgRow) -> Result<Self, Self::Error> {
+        Ok(StatementOutput {
+            total: row.try_get("valor")?,
+            created_at: Utc::now().naive_utc(),
+            limit: row.try_get("limite")?,
+        })
+    }
+}
+impl TryFrom<&PgRow> for StatementOutput {
+    type Error = sqlx::Error;
+
+    fn try_from(row: &PgRow) -> Result<Self, Self::Error> {
         Ok(StatementOutput {
             total: row.try_get("valor")?,
             created_at: Utc::now().naive_utc(),
