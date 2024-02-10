@@ -12,7 +12,7 @@ services:
       resources:
         limits:
           cpus: "0.4"
-          memory: "150MB"
+          memory: "100MB"
 
   api02:
     <<: *api
@@ -33,7 +33,7 @@ services:
       resources:
         limits:
           cpus: "0.25"
-          memory: "50MB"
+          memory: "70MB"
 
   db:
     image: postgres:latest
@@ -52,7 +52,7 @@ services:
       resources:
         limits:
           cpus: "0.5"
-          memory: 200MB
+          memory: 280MB
       restart_policy:
         condition: on-failure
 
