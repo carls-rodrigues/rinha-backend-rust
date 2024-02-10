@@ -63,7 +63,7 @@ impl Services {
             r#"
             SELECT s.valor, c.limite FROM public.clientes c
             JOIN public.saldos s ON c.id = s.cliente_id
-            WHERE c.id = $1
+            WHERE c.id = $1;
         "#,
         )
         .bind(customer_id)
@@ -81,7 +81,10 @@ impl Services {
         };
 
         if transaction.r#type == "d" {
-            let _ = self.debit_transaction(&mut customer, &transaction);
+            if let Err(err) = self.debit_transaction(&mut customer, &transaction) {
+                tx.rollback().await?;
+                return Err(err);
+            }
         }
         if transaction.r#type == "c" {
             self.credit_transaction(&mut customer, &transaction);
@@ -119,7 +122,7 @@ impl Services {
         transaction: &models::Transaction,
     ) -> Result<(), sqlx::Error> {
         // let mut tx = self.connection.begin().await?;
-        sqlx::query(
+        let insert_transaction = sqlx::query(
             r#"
                 INSERT INTO public.transacoes (cliente_id, valor, tipo, descricao)
                 VALUES ($1, $2, $3, $4)
@@ -130,8 +133,12 @@ impl Services {
         .bind(transaction.r#type.as_str())
         .bind(transaction.description.as_str())
         .execute(&mut *tx)
-        .await?;
-        sqlx::query(
+        .await;
+        if let Err(err) = insert_transaction {
+            tx.rollback().await?;
+            return Err(err);
+        }
+        let update_balance = sqlx::query(
             r#"
                 UPDATE public.saldos
                 SET valor = $1
@@ -141,7 +148,11 @@ impl Services {
         .bind(customer.balance)
         .bind(transaction.customer_id)
         .execute(&mut *tx)
-        .await?;
+        .await;
+        if let Err(err) = update_balance {
+            tx.rollback().await?;
+            return Err(err);
+        }
         tx.commit().await?;
         Ok(())
     }
