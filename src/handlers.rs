@@ -1,16 +1,13 @@
 use crate::errors::ApiError;
 use crate::{models, services::Services};
 use actix_web::{web, HttpResponse};
-use sqlx::PgPool;
 
 pub async fn get_statements(
-    db_pool: web::Data<PgPool>,
+    db_pool: web::Data<sqlx::PgPool>,
     customer_id: web::Path<i32>,
 ) -> Result<HttpResponse, ApiError> {
     let customer_id = customer_id.into_inner();
-    let services = Services {
-        connection: Box::new(db_pool.get_ref().to_owned()),
-    };
+    let services = Services::new(db_pool.into_inner());
     let fetch_all = services.get_statement(customer_id).await;
     match fetch_all {
         Ok(statement) => Ok(HttpResponse::Ok().json(statement)),
@@ -19,13 +16,11 @@ pub async fn get_statements(
 }
 
 pub async fn create_transaction(
-    db_pool: web::Data<PgPool>,
+    db_pool: web::Data<sqlx::PgPool>,
     customer_id: web::Path<i32>,
     input: web::Json<models::IncomeTransaction>,
 ) -> Result<HttpResponse, ApiError> {
-    let services = Services {
-        connection: Box::new(db_pool.get_ref().to_owned()),
-    };
+    let services = Services::new(db_pool.into_inner());
     let is_transaction_invalid = || {
         let transaction_type = input.r#type != "d" && input.r#type != "c";
         let transaciton = input.amount < 0;
