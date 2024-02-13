@@ -1,13 +1,18 @@
+use std::sync::Arc;
+
 use sqlx::Row;
 
 use crate::errors::ApiError;
 use crate::models::{self, StatementOutput};
 
 pub struct Services {
-    pub connection: Box<sqlx::PgPool>,
+    pub connection: Arc<sqlx::PgPool>,
 }
 
 impl Services {
+    pub fn new(connection: Arc<sqlx::PgPool>) -> Self {
+        Self { connection }
+    }
     pub async fn get_statement(
         &self,
         customer_id: i32,
@@ -46,6 +51,7 @@ impl Services {
         };
         Ok(account_statement)
     }
+
     pub async fn create_transaction(
         &self,
         customer_id: i32,
@@ -72,25 +78,27 @@ impl Services {
             created_at: chrono::Utc::now().naive_utc(),
             description: input.description,
         };
-
-        if transaction.r#type == "d" {
-            if let Err(err) = self.debit_transaction(&mut customer, &transaction) {
-                tx.rollback().await?;
-                return Err(err);
+        match transaction.r#type.as_str() {
+            "c" => {
+                self.credit_transaction(&mut tx, &mut customer, &transaction)
+                    .await?
             }
+            "d" => {
+                self.debit_transaction(&mut tx, &mut customer, &transaction)
+                    .await?
+            }
+            _ => return Err(ApiError::UnprocessableEntity),
         }
-        if transaction.r#type == "c" {
-            self.credit_transaction(&mut customer, &transaction);
-        }
-        self.do_transaction(tx, &customer, &transaction).await?;
+        self.do_transaction(tx, &transaction).await?;
 
         Ok(models::OutputTransaction {
             limit: customer.limit,
             balance: customer.balance,
         })
     }
-    fn debit_transaction(
+    async fn debit_transaction(
         &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         customer: &mut models::Customer,
         transaction: &models::Transaction,
     ) -> Result<(), ApiError> {
@@ -99,22 +107,45 @@ impl Services {
             return Err(ApiError::UnprocessableEntity);
         }
         customer.balance -= transaction.amount;
+        sqlx::query(
+            r#"
+                UPDATE public.saldos
+                SET valor = valor - $1
+                WHERE cliente_id = $2 AND valor - $1 >= - $3;
+            "#,
+        )
+        .bind(transaction.amount)
+        .bind(transaction.customer_id)
+        .bind(customer.limit)
+        .execute(&mut **tx)
+        .await?;
         Ok(())
     }
-    fn credit_transaction(
+    async fn credit_transaction(
         &self,
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         customer: &mut models::Customer,
         transaction: &models::Transaction,
-    ) {
+    ) -> Result<(), ApiError> {
         customer.balance += transaction.amount;
+        sqlx::query(
+            r#"
+                UPDATE public.saldos
+                SET valor = valor + $1
+                WHERE cliente_id = $2;
+            "#,
+        )
+        .bind(transaction.amount)
+        .bind(transaction.customer_id)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
     }
     async fn do_transaction(
         &self,
         mut tx: sqlx::Transaction<'_, sqlx::Postgres>,
-        customer: &models::Customer,
         transaction: &models::Transaction,
     ) -> Result<(), sqlx::Error> {
-        // let mut tx = self.connection.begin().await?;
         let insert_transaction = sqlx::query(
             r#"
                 INSERT INTO public.transacoes (cliente_id, valor, tipo, descricao)
@@ -128,21 +159,6 @@ impl Services {
         .execute(&mut *tx)
         .await;
         if let Err(err) = insert_transaction {
-            tx.rollback().await?;
-            return Err(err);
-        }
-        let update_balance = sqlx::query(
-            r#"
-                UPDATE public.saldos
-                SET valor = $1
-                WHERE cliente_id = $2
-            "#,
-        )
-        .bind(customer.balance)
-        .bind(transaction.customer_id)
-        .execute(&mut *tx)
-        .await;
-        if let Err(err) = update_balance {
             tx.rollback().await?;
             return Err(err);
         }
