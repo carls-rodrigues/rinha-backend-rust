@@ -2,7 +2,7 @@ version: "3.5"
 
 services:
   api01: &api
-    image: cerfdotdev/rinha-backend
+    image: cerfdotdev/rinha-rust:latest
     hostname: api01
     depends_on:
       - db
