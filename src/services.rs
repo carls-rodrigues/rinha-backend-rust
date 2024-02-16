@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use sqlx::Row;
+
 use crate::errors::ApiError;
-use crate::models::{self};
+use crate::models::{self, StatementOutput};
 use crate::queries::sql::{
     GET_STATEMENT_QUERY, INSERT_TRANSACTION_QUERY, UPDATE_CREDIT_TRANSACTION_QUERY,
     UPDATE_DEBIT_TRANSACTION_QUERY,
@@ -23,9 +25,19 @@ impl Services {
             .bind(customer_id)
             .fetch_all(self.connection.as_ref())
             .await?;
+        let statement: StatementOutput = query.first().unwrap().try_into().unwrap();
+        let mut transactions = vec![];
+        for row in query.iter() {
+            let transactions_empty = row.try_get::<i32, _>("tvalor").is_err();
+            if transactions_empty {
+                break;
+            }
+            let transaction: models::Transaction = row.try_into().unwrap();
+            transactions.push(transaction);
+        }
         let account_statement = models::AccountStatement {
-            balance: query.first().unwrap().try_into().unwrap(),
-            transactions: query.iter().map(|row| row.try_into().unwrap()).collect(),
+            balance: statement,
+            transactions,
         };
         Ok(account_statement)
     }
