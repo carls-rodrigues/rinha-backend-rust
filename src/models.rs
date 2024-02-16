@@ -14,7 +14,7 @@ impl TryFrom<PgRow> for Customer {
     fn try_from(row: PgRow) -> Result<Self, Self::Error> {
         Ok(Customer {
             limit: row.try_get("limite")?,
-            balance: row.try_get("valor")?,
+            balance: row.try_get("saldo")?,
         })
     }
 }
@@ -102,7 +102,7 @@ impl TryFrom<PgRow> for StatementOutput {
 
     fn try_from(row: PgRow) -> Result<Self, Self::Error> {
         Ok(StatementOutput {
-            total: row.try_get("valor")?,
+            total: row.try_get("saldo")?,
             created_at: Utc::now().naive_utc(),
             limit: row.try_get("limite")?,
         })
@@ -113,7 +113,7 @@ impl TryFrom<&PgRow> for StatementOutput {
 
     fn try_from(row: &PgRow) -> Result<Self, Self::Error> {
         Ok(StatementOutput {
-            total: row.try_get("valor")?,
+            total: row.try_get("saldo")?,
             created_at: Utc::now().naive_utc(),
             limit: row.try_get("limite")?,
         })

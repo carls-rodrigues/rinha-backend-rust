@@ -10,12 +10,12 @@ use std::str::FromStr;
 mod errors;
 mod handlers;
 mod models;
+mod queries;
 mod services;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // TODO: move database url to env variable and check current environment
-    let db_pool = establish_connection("postgres://rinha:rinha@db:5432/rinha").await;
+    let db_pool = establish_connection("postgres://rinha:rinha@localhost:5432/rinha").await;
     let port = u16::from_str("8080");
     let address = format!("0.0.0.0:{}", port.unwrap());
     let listener = TcpListener::bind(address).expect("Failed to bind random port");
@@ -46,17 +46,7 @@ pub fn mk_app(
         )
         .into()
     }));
-    let mut route = web::scope("clientes")
-        .guard(actix_web::guard::fn_guard(|ctx| {
-            let binding = ctx.head().uri.to_string();
-            let url = binding.split('/').collect::<Vec<&str>>();
-            let parse_int = url[2].parse::<i32>();
-            if let Ok(customer_id) = parse_int {
-                return customer_id <= 5;
-            }
-            false
-        }))
-        .app_data(web::Data::new(db_pool));
+    let mut route = web::scope("clientes").app_data(web::Data::new(db_pool));
     route = route.service(
         web::resource("/{costumer_id}/extrato").route(web::get().to(handlers::get_statements)),
     );
@@ -70,6 +60,7 @@ pub fn mk_app(
 
 async fn establish_connection(database_url: &str) -> Pool<Postgres> {
     PgPoolOptions::new()
+        .min_connections(30)
         .connect(database_url)
         .await
         .expect("Failed to connect to Postgres.")
