@@ -15,7 +15,7 @@ mod services;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let db_pool = establish_connection("postgres://rinha:rinha@localhost:5432/rinha").await;
+    let db_pool = establish_connection("postgres://rinha:rinha@db:5432/rinha").await;
     let port = u16::from_str("8080");
     let address = format!("0.0.0.0:{}", port.unwrap());
     let listener = TcpListener::bind(address).expect("Failed to bind random port");
