@@ -1,9 +1,9 @@
+use rayon::prelude::*;
+use sqlx::Row;
 use std::sync::Arc;
 
-use sqlx::Row;
-
 use crate::errors::ApiError;
-use crate::models::{self, StatementOutput};
+use crate::models::{self, StatementOutput, Transaction};
 use crate::queries::sql::{
     GET_STATEMENT_QUERY, INSERT_TRANSACTION_QUERY, UPDATE_CREDIT_TRANSACTION_QUERY,
     UPDATE_DEBIT_TRANSACTION_QUERY,
@@ -25,16 +25,18 @@ impl Services {
             .bind(customer_id)
             .fetch_all(self.connection.as_ref())
             .await?;
-        let statement: StatementOutput = query.first().unwrap().try_into().unwrap();
-        let mut transactions = vec![];
-        for row in query.iter() {
-            let transactions_empty = row.try_get::<i32, _>("tvalor").is_err();
-            if transactions_empty {
-                break;
-            }
-            let transaction: models::Transaction = row.try_into().unwrap();
-            transactions.push(transaction);
-        }
+        let first = query.first().unwrap();
+        let statement: StatementOutput = first.try_into().unwrap();
+        let transactions: Vec<Transaction> = match first.try_get::<i32, _>("tvalor") {
+            Ok(_) => query
+                .par_iter()
+                .map(|x| {
+                    let transaction: models::Transaction = x.try_into().unwrap();
+                    transaction
+                })
+                .collect::<Vec<models::Transaction>>(),
+            Err(_) => Vec::new(),
+        };
         let account_statement = models::AccountStatement {
             balance: statement,
             transactions,
@@ -65,20 +67,24 @@ impl Services {
         mut tx: sqlx::Transaction<'_, sqlx::Postgres>,
         transaction: models::Transaction,
     ) -> Result<(i32, i32), ApiError> {
-        let update_balance = sqlx::query(if transaction.r#type == "c" {
-            UPDATE_CREDIT_TRANSACTION_QUERY
-        } else {
-            UPDATE_DEBIT_TRANSACTION_QUERY
-        })
-        .bind(transaction.amount)
-        .bind(transaction.customer_id)
-        .fetch_one(&mut *tx)
-        .await;
-        if update_balance.is_err() {
-            tx.rollback().await?;
-            return Err(ApiError::UnprocessableEntity);
-        }
-        let customer: models::Customer = update_balance.unwrap().try_into().unwrap();
+        let current_transaction_query = match transaction.r#type.as_str() {
+            "c" => UPDATE_CREDIT_TRANSACTION_QUERY,
+            "d" => UPDATE_DEBIT_TRANSACTION_QUERY,
+            _ => return Err(ApiError::UnprocessableEntity),
+        };
+
+        let update_balance = sqlx::query(current_transaction_query)
+            .bind(transaction.amount)
+            .bind(transaction.customer_id)
+            .fetch_one(&mut *tx)
+            .await;
+        let customer = match update_balance.is_err() {
+            false => {
+                let customer: models::Customer = update_balance.unwrap().try_into().unwrap();
+                Ok(customer)
+            }
+            _ => Err(ApiError::UnprocessableEntity),
+        }?;
         let insert_transaction = sqlx::query(INSERT_TRANSACTION_QUERY)
             .bind(transaction.customer_id)
             .bind(transaction.amount)
@@ -86,11 +92,15 @@ impl Services {
             .bind(transaction.description.as_str())
             .execute(&mut *tx)
             .await;
-        if insert_transaction.is_err() {
-            tx.rollback().await?;
-            return Err(ApiError::UnprocessableEntity);
+        match insert_transaction {
+            Ok(_) => {
+                tx.commit().await?;
+                Ok((customer.limit, customer.balance))
+            }
+            Err(_) => {
+                tx.rollback().await?;
+                Err(ApiError::UnprocessableEntity)
+            }
         }
-        tx.commit().await?;
-        Ok((customer.limit, customer.balance))
     }
 }

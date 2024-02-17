@@ -4,6 +4,7 @@ use actix_web::web::JsonConfig;
 use actix_web::{web, HttpServer};
 use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Pool, Postgres};
+use std::env;
 use std::net::TcpListener;
 use std::str::FromStr;
 
@@ -15,8 +16,10 @@ mod services;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let db_pool = establish_connection("postgres://rinha:rinha@db:5432/rinha").await;
-    let port = u16::from_str("8080");
+    dotenv::dotenv().ok();
+    let port = env::var("PORT").unwrap();
+    let db_pool = establish_connection("postgres://rinha:rinha@localhost:5432/rinha").await;
+    let port = u16::from_str(&port);
     let address = format!("0.0.0.0:{}", port.unwrap());
     let listener = TcpListener::bind(address).expect("Failed to bind random port");
     let server = HttpServer::new(move || mk_app(db_pool.clone()))
