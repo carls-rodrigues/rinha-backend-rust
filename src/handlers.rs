@@ -1,25 +1,27 @@
 use crate::errors::ApiError;
+use crate::AppState;
 use crate::{models, services::Services};
-use actix_web::{web, HttpResponse};
+use actix_web::{get, post, web, HttpResponse};
 
+#[get("/{costumer_id}/extrato")]
 pub async fn get_statements(
-    db_pool: web::Data<sqlx::PgPool>,
+    state: web::Data<AppState>,
     customer_id: web::Path<i32>,
 ) -> Result<HttpResponse, ApiError> {
     let customer_id = customer_id.into_inner();
     if customer_id > 5 {
         return Err(ApiError::NotFound);
     }
-    let services = Services::new(db_pool.into_inner());
+    let services = Services::new(state);
     let fetch_all = services.get_statement(customer_id).await;
     match fetch_all {
         Ok(statement) => Ok(HttpResponse::Ok().json(statement)),
         Err(err) => Err(err),
     }
 }
-
+#[post("/{costumer_id}/transacoes")]
 pub async fn create_transaction(
-    db_pool: web::Data<sqlx::PgPool>,
+    state: web::Data<AppState>,
     customer_id: web::Path<i32>,
     input: web::Json<models::IncomeTransaction>,
 ) -> Result<HttpResponse, ApiError> {
@@ -27,7 +29,7 @@ pub async fn create_transaction(
     if customer_id > 5 {
         return Err(ApiError::NotFound);
     }
-    let services = Services::new(db_pool.into_inner());
+    let services = Services::new(state);
     let is_transaction_invalid = || {
         let transaction_type = input.r#type != "d" && input.r#type != "c";
         let transaciton = input.amount < 0;

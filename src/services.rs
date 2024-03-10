@@ -1,6 +1,6 @@
+use actix_web::web;
 use rayon::prelude::*;
 use sqlx::Row;
-use std::sync::Arc;
 
 use crate::errors::ApiError;
 use crate::models::{self, StatementOutput, Transaction};
@@ -8,14 +8,15 @@ use crate::queries::sql::{
     GET_STATEMENT_QUERY, INSERT_TRANSACTION_QUERY, UPDATE_CREDIT_TRANSACTION_QUERY,
     UPDATE_DEBIT_TRANSACTION_QUERY,
 };
+use crate::AppState;
 
 pub struct Services {
-    pub connection: Arc<sqlx::PgPool>,
+    state: web::Data<AppState>,
 }
 
 impl Services {
-    pub fn new(connection: Arc<sqlx::PgPool>) -> Self {
-        Self { connection }
+    pub fn new(state: web::Data<AppState>) -> Self {
+        Self { state }
     }
     pub async fn get_statement(
         &self,
@@ -23,7 +24,7 @@ impl Services {
     ) -> Result<models::AccountStatement, ApiError> {
         let query = sqlx::query(GET_STATEMENT_QUERY)
             .bind(customer_id)
-            .fetch_all(self.connection.as_ref())
+            .fetch_all(&self.state.db)
             .await?;
         let first = query.first().unwrap();
         let statement: StatementOutput = first.try_into().unwrap();
@@ -49,7 +50,7 @@ impl Services {
         customer_id: i32,
         input: models::IncomeTransaction,
     ) -> Result<models::OutputTransaction, ApiError> {
-        let tx = self.connection.begin().await?;
+        let tx = self.state.db.begin().await?;
         let transaction = models::Transaction {
             id: 1,
             amount: input.amount,
